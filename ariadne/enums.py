@@ -154,21 +154,25 @@ def enum_values_in_object_type(
         yield from enum_values_in_field_args(field_name, field)
 
 
-@enum_values_in_types.register(GraphQLInputObjectType)
-def enum_values_in_input_type(
-    type_: GraphQLInputObjectType,
-    field_name,
-) -> Generator[InputFieldWithKeys, None, None]:
-    for input_name, field in type_.fields.items():
+def _get_field_with_keys(field_name, fields):
+    for input_name, field in fields:
         resolved_type = resolve_null_type(field.type)
         if isinstance(resolved_type, GraphQLEnumType):
             yield field_name, input_name, field, None
 
         if isinstance(resolved_type, GraphQLInputObjectType):
-            if field.ast_node is not None:
+            if field.ast_node is not None and field.ast_node.default_value is not None:
                 routes = get_enum_keys_from_ast(field.ast_node)
                 for route in routes:
                     yield field_name, input_name, field, route
+
+
+@enum_values_in_types.register(GraphQLInputObjectType)
+def enum_values_in_input_type(
+    type_: GraphQLInputObjectType,
+    field_name,
+) -> Generator[InputFieldWithKeys, None, None]:
+    yield from _get_field_with_keys(field_name, type_.fields.items())
 
 
 def enum_values_in_field_args(
@@ -183,16 +187,7 @@ def enum_values_in_field_args(
         )
     ]
 
-    for arg_name, arg in args:
-        type_ = resolve_null_type(arg.type)
-        if isinstance(type_, GraphQLEnumType):
-            yield field_name, arg_name, arg, None
-
-        if isinstance(type_, GraphQLInputObjectType):
-            if arg.ast_node is not None and arg.ast_node.default_value is not None:
-                routes = get_enum_keys_from_ast(arg.ast_node)
-                for route in routes:
-                    yield field_name, arg_name, arg, route
+    yield from _get_field_with_keys(field_name, args)
 
 
 def get_enum_keys_from_ast(ast_node: InputValueDefinitionNode) -> List[List["str"]]:
